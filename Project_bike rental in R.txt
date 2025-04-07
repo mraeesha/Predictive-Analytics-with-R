@@ -1,0 +1,98 @@
+
+library(DescTools)
+library(leaps)
+library(dplyr)
+library(rpart)  
+library(caret)
+library(rpart.plot) 
+library(vip)  
+library(rattle)
+library(randomForest)
+
+hour_bikerentals <- read.csv("hour.csv",  as.is = TRUE)
+str(hour_bikerentals)
+
+hour_bikerentals <- hour_bikerentals %>%
+  select(-c("dteday", "yr", "instant", "registered","workingday", "atemp", "casual"))
+str(hour_bikerentals)
+
+
+cols <- c( "holiday", "weekday","season","mnth", "weathersit", "hr")
+hour_bikerentals[ , cols] <- lapply(hour_bikerentals[ , cols], factor)
+
+str(hour_bikerentals)
+PlotMiss(hour_bikerentals)
+
+hour_bikerentals <- na.omit(hour_bikerentals)
+
+PlotMiss(hour_bikerentals)
+str(hour_bikerentals)
+
+
+set.seed(666)  # don't change this line 
+
+index <- sample(1:nrow(hour_bikerentals), round(nrow(hour_bikerentals)*0.7))
+train <- hour_bikerentals[index,     ]
+test  <- hour_bikerentals[- index,     ]
+
+model <- lm(cnt~ .,data =train)
+summary(model)
+
+predictions_testdata <- predict(model , interval = "confidence", newdata = test )
+head(predictions_testdata)
+
+
+residuals <- test$cnt - predictions_testdata[ , 1]
+sqrt(sum(residuals^2)/nrow(test)) 
+
+
+res <- model$residuals
+qqnorm(res, main = "QQ Plot residuals versus the theoretical normal distribution.")
+qqline(res, col = "deeppink")
+
+
+plot(model)
+
+
+model2 <- lm(cnt ~ hr*temp + season + mnth + holiday + weekday + weathersit + hum + windspeed + casual, data = train)
+summary(model2)
+
+model2 <- lm(cnt ~ hr*weathersit + season + mnth + holiday + weekday + temp  + hum + windspeed + casual, data = train)
+summary(model2)
+
+model2 <- lm(cnt ~ hr*casual  + season + mnth + holiday + weekday + temp  + hum + windspeed + weathersit, data = train)
+summary(model2)
+
+model3 <- rpart(formula= cnt ~ ., data= train   , method=  "anova" )
+
+vip(model3)
+
+rpart.plot(model3)
+
+plotcp(model3)
+
+
+model_pruned <- rpart(formula= cnt ~ .,data = train , method="anova" , control=list(cp = 0.012, xval = 10))
+
+
+rpart.plot(model_pruned)
+vip(model_pruned)
+
+set.seed(123)
+rf_model1 <- randomForest( cnt ~. , data= train, mtry= 5 , importance= TRUE )
+rf_model1 
+
+set.seed(123)
+rf_model2 <- randomForest( cnt ~. , data= train, mtry= 8 , importance= TRUE )
+rf_model2
+
+yhat <- predict(rf_model1, newdata = test)
+sqrt(mean((yhat - test$cnt)^2))
+
+sqrt(4648.903)  #train
+
+varImpPlot(rf_model1)
+
+importance(rf_model1)
+
+
